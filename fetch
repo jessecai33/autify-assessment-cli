@@ -1,0 +1,84 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require 'open-uri'
+require 'nokogiri'
+
+# get --metadata flag from ARGV
+options = {}
+OptionParser.new do |parser|
+  parser.on('--metadata', 'Show metadata of downloaded file') do
+    options[:metadata] = true
+  end
+end.parse!
+
+# get urls from ARGV
+def parse_uris(argv, options)
+  options[:metadata] ? argv - %w[--metadata] : argv
+end
+
+# download html from url
+def get_html(url)
+  uri = URI(url)
+  puts "Downloading: #{url}"
+  begin
+    html = URI.open(url)
+    record_meta(uri.host, html, DateTime.now)
+    write_html(uri, html)
+  rescue StandardError => e
+    puts e
+  end
+end
+
+# write html to file
+def write_html(uri, html)
+  open(File.basename(uri.host + '.html'), 'w') do |file|
+    file.write(html.read)
+  end
+end
+
+# save metadata to .meta file
+def record_meta(host, html, datetime)
+  site = host
+  doc = Nokogiri::HTML(html)
+  num_links = doc.search('a').count
+  images = doc.search('img').count
+  last_fetch = datetime.strftime('%a %b %d %Y %H:%M %z')
+  write_meta(site, num_links, images, last_fetch)
+end
+
+# write meta to file
+def write_meta(site, number_links, images, last_fetch)
+  open(File.basename(site + '.meta'), 'w') do |file|
+    file.write("site: #{site}\n")
+    file.write("num_links: #{number_links}\n")
+    file.write("images: #{images}\n")
+    file.write("last_fetch: #{last_fetch}\n")
+  end
+end
+
+# read meta from .meta file
+def read_meta(site)
+  open(File.basename(site + '.meta'), 'r') do |file|
+    file.each_line do |line|
+      puts line
+    end
+    puts
+  end
+end
+
+# main method
+def main(argv, options)
+  uris = parse_uris(argv, options)
+  if options[:metadata]
+    uris.each do |uri|
+      File.exist?(File.basename(URI(uri).host + '.meta')) ? read_meta(URI(uri).host) : get_html(uri)
+    end
+  else
+    uris.each do |uri|
+      get_html(uri)
+    end
+  end
+end
+
+main(ARGV, options)
